@@ -22,7 +22,7 @@
 
 后续学习基于[《The Go Programming Language》（Go语言圣经中文版）](https://gopl-zh.github.io/index.html)进行，记录个人觉得书中关键和有意思的内容、代码练习等。
 
-## 前言
+### **前言**
 
 后续参考引用会尽量表明，*“斜体”*代表直接引用书中内容，其他引自互联网的内容会特别标注。
 
@@ -44,9 +44,7 @@ A：😄 你太客气了！
 
 ---
 
-
-
-## 环境安装
+**环境安装**
 
 https://go.dev/doc/install, 选择对应版本安装
 
@@ -54,6 +52,8 @@ https://go.dev/doc/install, 选择对应版本安装
 ❯ go version
 go version go1.24.4 darwin/arm64
 ```
+
+后面的标题对应书中标题
 
 ### 1.<span id="jump1">入门</span>
 
