@@ -3,6 +3,7 @@
 | 日期       | 内容                                                | 链接        |
 | ---------- | --------------------------------------------------- | ----------- |
 | 2025.07.03 | 记录本文初稿、学习（译者序、前言、入门1.1 1.2章节） | [1](#jump1) |
+| 2025.07.04 | 学习（1.3）                                         | [1](#jump1) |
 
 ## 一、为什么要学
 
@@ -130,8 +131,6 @@ go: downloading golang.org/x/sync v0.15.0
 
 #### 1.2.命令行参数
 
-
-
 ```go
 // Echo2 prints its command-line arguments.
 package main
@@ -216,4 +215,234 @@ func main() {
 	fmt.Println("Join funcation cost time:", n_end.Sub(n_now))
 }
 ```
+
+#### 1.3.查找重复的行
+
+本小结以查找重复行为案例，提及了多种读取方式（标准输入、文件逐行读取、一次性读取）、`map`、`Printf`、参数传递、错误处理等内容，有一个练习题。
+
+从标准输入读取内容
+
+```go
+// Dup1 prints the text of each line that appears more than
+// once in the standard input, preceded by its count.
+package main
+
+import (
+    "bufio"
+    "fmt"
+    "os"
+)
+
+func main() {
+  //创建一个字符串到整数的 map，记录每行文本出现的次数。
+    counts := make(map[string]int)
+  //创建一个 Scanner 对象，从标准输入读取文本（逐行读取）。
+    input := bufio.NewScanner(os.Stdin)
+  /*input.Scan() 会读取下一行内容，直到遇到 EOF（结束输入）。
+		input.Text() 返回当前行的字符串。
+		每读取一行，就将该行作为键加入 map 并递增次数。
+	*/
+    for input.Scan() {
+        counts[input.Text()]++
+    }
+    // NOTE: ignoring potential errors from input.Err()
+  
+    for line, n := range counts {
+        if n > 1 {
+            fmt.Printf("%d\t%s\n", n, line)
+        }
+    }
+}
+
+```
+
+从标准输入读取`bufio.NewScanner(os.Stdin)`
+
+*内置函数 `make` 创建空 `map`*
+
+*基于 `range` 的循环，并在 `counts` 这个 `map` 上迭代。跟之前类似，每次迭代得到两个结果，键和其在 `map` 中对应的值。**`map` 的迭代顺序并不确定**，从实践来看，该顺序随机，每次运行都会变化。这种设计是有意为之的，*
+
+*类似于 C 或其它语言里的 `printf` 函数，`fmt.Printf` 函数对一些表达式产生格式化输出。*
+
+*`Printf` 有一大堆这种转换，Go程序员称之为动词（verb）。下面的表格虽然远不是完整的规范，但展示了可用的很多特性：*
+
+```text
+%d          十进制整数
+%x, %o, %b  十六进制，八进制，二进制整数。
+%f, %g, %e  浮点数： 3.141593 3.141592653589793 3.141593e+00
+%t          布尔：true或false
+%c          字符（rune） (Unicode码点)
+%s          字符串
+%q          带双引号的字符串"abc"或带单引号的字符'c'
+%v          变量的自然形式（natural format）
+%T          变量的类型
+%%          字面上的百分号标志（无操作数）
+制表符\t和换行符\n
+```
+
+从文件中读取
+
+```go
+// Dup2 prints the count and text of lines that appear more than once
+// in the input.  It reads from stdin or from a list of named files.
+package main
+
+import (
+    "bufio"
+    "fmt"
+    "os"
+)
+
+func main() {
+    counts := make(map[string]int)
+    files := os.Args[1:]
+    if len(files) == 0 {
+        countLines(os.Stdin, counts)
+    } else {
+        for _, arg := range files {
+            f, err := os.Open(arg)
+            if err != nil {
+                fmt.Fprintf(os.Stderr, "dup2: %v\n", err)
+                continue
+            }
+            countLines(f, counts)
+            f.Close()
+        }
+    }
+    for line, n := range counts {
+        if n > 1 {
+            fmt.Printf("%d\t%s\n", n, line)
+        }
+    }
+}
+	
+func countLines(f *os.File, counts map[string]int) {
+    input := bufio.NewScanner(f)
+    for input.Scan() {
+        counts[input.Text()]++
+    }
+    // NOTE: ignoring potential errors from input.Err()
+}
+
+```
+
+*`os.Open` 函数返回两个值。第一个值是被打开的文件（`*os.File`），其后被 `Scanner` 读取*。PS:使用逐行读取，**内存占用更低**（比 `ReadFile` 更安全）
+
+*`os.Open` 返回的第二个值是内置 `error` 类型的值。如果 `err` 等于内置值`nil`（译注：相当于其它语言里的 `NULL`），那么文件被成功打开。*
+
+*进入错误处理流程后，`continue` 语句直接跳到 `for` 循环的下个迭代开始执行。*
+
+*函数和包级别的变量（package-level entities）可以任意顺序声明，并不影响其被调用。*
+
+*`map` 是一个由 `make` 函数创建的数据结构的引用。`map` 作为参数传递给某函数时，该函数接收这个引用的一份拷贝（copy，或译为副本），被调用函数对 `map` 底层数据结构的任何修改，调用者函数都可以通过持有的 `map` 引用看到。在我们的例子中，`countLines` 函数向 `counts` 插入的值，也会被 `main` 函数看到。（译注：类似于 C++ 里的引用传递，实际上指针是另一个指针了，但内部存的值指向同一块内存）*
+
+
+
+前两个例子基于“流”的模式读取数据，下面将全部数据一次性读入内存
+
+```go
+package main
+
+import (
+    "fmt"
+    "io/ioutil"
+    "os"
+    "strings"
+)
+
+func main() {
+    counts := make(map[string]int)
+    for _, filename := range os.Args[1:] {
+        data, err := ioutil.ReadFile(filename)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "dup3: %v\n", err)
+            continue
+        }
+      //转换为string后按换行符分割
+        for _, line := range strings.Split(string(data), "\n") {
+            counts[line]++
+        }
+    }
+    for line, n := range counts {
+        if n > 1 {
+            fmt.Printf("%d\t%s\n", n, line)
+        }
+    }
+}
+
+```
+
+
+
+*简化，只读指定文件，不读标准输入。其次，由于行计数代码只在一处用到，故将其移回 `main` 函数。*
+
+*`ReadFile` 函数返回一个字节切片（byte slice），必须把它转换为 `string`，才能用 `strings.Split` 分割。*
+
+*实现上，`bufio.Scanner`、`ioutil.ReadFile` 和 `ioutil.WriteFile` 都使用 `*os.File` 的 `Read` 和 `Write` 方法，但是，大多数程序员很少需要直接调用那些低级（lower-level）函数。高级（higher-level）函数，像 `bufio` 和 `io/ioutil` 包中所提供的那些，用起来要容易点。*
+
+**练习 1.4：** 修改 `dup2`，出现重复的行时打印文件名称。
+
+```go
+// Dup2 prints the count and text of lines that appear more than once
+// in the input.  It reads from stdin or from a list of named files.
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+)
+
+func main() {
+	// map[filename][line]count
+	counts := make(map[string]map[string]int)
+	files := os.Args[1:]
+	if len(files) == 0 {
+		countLines("<stdin>", os.Stdin, counts)
+	} else {
+		for _, filename := range files {
+			f, err := os.Open(filename)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "dup2: %v\n", err)
+				continue
+			}
+			countLines(filename, f, counts)
+			f.Close()
+		}
+	}
+	for filename, lineMap := range counts {
+		for line, n := range lineMap {
+			if n > 1 {
+				fmt.Printf("%s\t%d\t%s\n", filename, n, line)
+			}
+		}
+	}
+}
+
+func countLines(filename string, f *os.File, counts map[string]map[string]int) {
+	// 安全初始化 map 的标准写法，用于处理嵌套 map 的情况
+	if counts[filename] == nil {
+		counts[filename] = make(map[string]int)
+	}
+
+	input := bufio.NewScanner(f)
+	for input.Scan() {
+		line := input.Text()
+		counts[filename][line]++
+	}
+	// NOTE: ignoring potential errors from input.Err()
+}
+```
+
+思路：
+
+首先要修改counts的类型为map[string]map[string]int，
+
+其次修改countLines函数，使其接收三个参数，并在函数中增加安全初始化嵌套map的情况（`counts` 是一个 map，它的值本身又是一个 map。在第一次访问 `counts[filename]` 时，（第二层）默认是 `nil`，**不能直接赋值**，Go 会报运行时错误）
+
+修改for循环，处理嵌套map的情况
+
+
+
+
 
