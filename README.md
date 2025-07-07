@@ -442,7 +442,264 @@ func countLines(filename string, f *os.File, counts map[string]map[string]int) {
 
 修改for循环，处理嵌套map的情况
 
+#### 1.4. GIF动画
+
+```go
+// Lissajous generates GIF animations of random Lissajous figures.
+package main
+
+import (
+    "image"
+    "image/color"
+    "image/gif"
+    "io"
+    "math"
+    "math/rand"
+    "os"
+    "time"
+)
+/*
+color.Color 是 Go 标准库中的一个接口，用于表示“一个颜色”。
+部分	含义
+var palette	声明一个变量，名字叫 palette
+[]color.Color	类型是：color.Color 接口的切片（即可以存多个颜色）
+{color.White, color.Black}	切片的初始值是白色和黑色两个颜色
+*/
+var palette = []color.Color{color.White, color.Black}
+
+const (
+    whiteIndex = 0 // first color in palette
+    blackIndex = 1 // next color in palette
+)
+
+func main() {
+    // The sequence of images is deterministic unless we seed
+    // the pseudo-random number generator using the current time.
+    // Thanks to Randall McPherson for pointing out the omission.
+    rand.Seed(time.Now().UTC().UnixNano())
+    lissajous(os.Stdout)
+}
+
+func lissajous(out io.Writer) {
+    const (
+        cycles  = 5     // number of complete x oscillator revolutions
+        res     = 0.001 // angular resolution
+        size    = 100   // image canvas covers [-size..+size]
+        nframes = 64    // number of animation frames
+        delay   = 8     // delay between frames in 10ms units
+    )
+
+    freq := rand.Float64() * 3.0 // relative frequency of y oscillator
+    anim := gif.GIF{LoopCount: nframes}
+    phase := 0.0 // phase difference
+    for i := 0; i < nframes; i++ {
+        rect := image.Rect(0, 0, 2*size+1, 2*size+1)
+        img := image.NewPaletted(rect, palette)
+        for t := 0.0; t < cycles*2*math.Pi; t += res {
+            x := math.Sin(t)
+            y := math.Sin(t*freq + phase)
+            img.SetColorIndex(size+int(x*size+0.5), size+int(y*size+0.5),
+                blackIndex)
+        }
+        phase += 0.1
+        anim.Delay = append(anim.Delay, delay)
+        anim.Image = append(anim.Image, img)
+    }
+    gif.EncodeAll(out, &anim) // NOTE: ignoring encoding errors
+}
+
+
+```
+
+在包的导入路径包含多个单词时，如“image/color”，可以只用最后一个单词表示->color.White
+
+在 Go 语言中，`const` 用于声明**常量**（constant），即在编译时就确定了值，且运行时不可更改。
 
 
 
+
+
+**练习 1.5：** 修改前面的Lissajous程序里的调色板，由黑色改为绿色。我们可以用`color.RGBA{0xRR, 0xGG, 0xBB, 0xff}`来得到`#RRGGBB`这个色值，三个十六进制的字符串分别代表红、绿、蓝像素。
+
+```
+var palette = []color.Color{color.White, color.RGBA{0x00, 0xff, 0x00, 0xff}} // 绿色
+```
+
+**练习 1.6：** 修改Lissajous程序，修改其调色板来生成更丰富的颜色，然后修改SetColorIndex的第三个参数，看看显示结果吧。
+
+```go
+var palette = []color.Color{
+    color.White,                   // index 0：背景色
+    color.RGBA{255, 0, 0, 255},    // index 1：红
+    color.RGBA{255, 165, 0, 255},  // index 2：橙
+    color.RGBA{255, 255, 0, 255},  // index 3：黄
+    color.RGBA{0, 255, 0, 255},    // index 4：绿
+    color.RGBA{0, 0, 255, 255},    // index 5：蓝
+}
+.........
+.........
+const (
+	whiteIndex = 0 // first color in palette
+)
+........
+........
+colorIndex := uint8(i%(len(palette)-1) + 1)
+
+		for t := 0.0; t < cycles*2*math.Pi; t += res {
+			x := math.Sin(t)
+			y := math.Sin(t*freq + phase)
+			img.SetColorIndex(size+int(x*size+0.5), size+int(y*size+0.5), colorIndex)
+		}
+
+
+```
+
+首先定义了调色板包含一个背景色和五个颜色，这时 `len(palette) = 6`，其中：
+
+- `palette[0]` 是背景白色
+- `palette[1]`~`palette[5]` 是彩色线条颜色
+
+
+
+colorIndex := uint8(i%(len(palette)-1) + 1)用于随机：
+
+`len(palette) - 1 = 5`：去掉背景色，只用彩色部分
+
+`i % 5`：确保帧编号在 0~4 之间循环（避免超出索引）
+
+`+1`：跳过背景色 `palette[0]`，确保颜色索引从 1 开始
+
+uint8：SetColorIndex需要的类型
+
+#### 1.5.获取url
+
+*为了最简单地展示基于HTTP获取信息的方式，下面给出一个示例程序fetch，这个程序将获取对应的url，并将其源文本打印出来；这个例子的灵感来源于curl工具。当然，curl提供的功能更为复杂丰富，这里只编写最简单的样例。这个样例之后还会多次被用到。*
+
+```go
+// Fetch prints the content found at a URL.
+package main
+
+import (
+    "fmt"
+    "io/ioutil"
+    "net/http"
+    "os"
+)
+
+func main() {
+    for _, url := range os.Args[1:] {
+        resp, err := http.Get(url)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "fetch: %v\n", err)
+            os.Exit(1)
+        }
+        b, err := io.ReadAll(resp.Body)
+        resp.Body.Close()
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "fetch: reading %s: %v\n", url, err)
+            os.Exit(1)
+        }
+        fmt.Printf("%s", b)
+    }
+}
+
+```
+
+
+
+**练习 1.7：** 函数调用io.Copy(dst, src)会从src中读取内容，并将读到的结果写入到dst中，使用这个函数替代掉例子中的ioutil.ReadAll来拷贝响应结构体到os.Stdout，避免申请一个缓冲区（例子中的b）来存储。记得处理io.Copy返回结果中的错误。
+
+```go
+// Fetch prints the content found at a URL.
+package main
+
+import (
+    "fmt"
+    "io"
+    "net/http"
+    "os"
+)
+
+func main() {
+    for _, url := range os.Args[1:] {
+        resp, err := http.Get(url)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "fetch: %v\n", err)
+            os.Exit(1)
+        }
+      
+       defer resp.Body.Close()
+      
+        _, err = io.Copy(os.Stdout, resp.Body)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "fetch: Copy faild %s: %v\n", url, err)
+            os.Exit(1)
+        }
+    }
+}
+
+```
+
+`defer resp.Body.Close()`：`defer` 是 Go 的延迟执行机制，在函数结束时自动执行。
+
+`resp.Body` 是一个 `io.ReadCloser`，它是连接服务器的数据流通道。你**必须手动关闭它**，否则连接会一直占用内存和资源。
+
+`io.Copy`有两个返回值：返回的字节数、err，我们只关注返回的错误，使用_忽略第一个返回值。
+
+**练习 1.8：** 修改fetch这个范例，如果输入的url参数没有 `http://` 前缀的话，为这个url加上该前缀。你可能会用到strings.HasPrefix这个函数。
+
+```
+ if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+            url = "http://" + url
+        }
+```
+
+`func HasPrefix(s, prefix string) bool` 判断s是否以prefix开头
+
+**练习 1.9：** 修改fetch打印出HTTP协议的状态码，可以从resp.Status变量得到该状态码。
+
+```
+        //打印状态码，不需要在异常流程里打印，因为err时resp == nil
+        fmt.Fprintf(os.Stdout, "status code: %s\n\n", resp.Status)
+```
+
+完整代码
+
+```
+// Fetch prints the content found at a URL.
+package main
+
+import (
+    "fmt"
+    "io"
+    "net/http"
+    "os"
+    "strings"
+)
+
+func main() {
+    for _, url := range os.Args[1:] {
+    	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+    		url = "http://" + url
+    	}
+        resp, err := http.Get(url)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "fetch: %v\n", err)
+            os.Exit(1)
+        }
+      
+        defer resp.Body.Close()
+        //打印状态码，不需要在异常流程里打印，因为err时resp == nil
+        fmt.Fprintf(os.Stdout, "status code: %s\n\n", resp.Status)
+
+        _, err = io.Copy(os.Stdout, resp.Body)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "fetch: Copy faild %s: %v\n", url, err)
+            os.Exit(1)
+        }
+        
+    }
+}
+
+```
 
