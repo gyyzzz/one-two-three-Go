@@ -1,10 +1,10 @@
 # Go语言自学笔记
 
-| 日期       | 内容                              | 链接        |
-| ---------- | --------------------------------- | ----------- |
-| 2025.07.03 | （译者序、前言、入门1.1 1.2章节） | [1](#jump1) |
-| 2025.07.04 | （1.3）                           | [1](#jump1) |
-| 2025.07.07 | （1.4、1.5）                      |             |
+| 日期       | 内容                              |
+| ---------- | --------------------------------- |
+| 2025.07.03 | （译者序、前言、入门1.1 1.2章节） |
+| 2025.07.04 | （1.3）                           |
+| 2025.07.07 | （1.4、1.5）                      |
 
 ## 一、为什么要学
 
@@ -703,4 +703,195 @@ func main() {
 }
 
 ```
+
+#### 1.6.并发获取多个url
+
+*Go语言最有意思并且最新奇的特性就是对并发编程的支持。并发编程是一个大话题，在第八章和第九章中会专门讲到。这里我们只浅尝辄止地来体验一下Go语言里的goroutine和channel。*
+
+```go
+// Fetchall fetches URLs in parallel and reports their times and sizes.
+package main
+
+import (
+    "fmt"
+    "io"
+    "io/ioutil"
+    "net/http"
+    "os"
+    "time"
+)
+
+func main() {
+    start := time.Now()
+    ch := make(chan string)
+    for _, url := range os.Args[1:] {
+        go fetch(url, ch) // start a goroutine
+    }
+    for range os.Args[1:] {
+        fmt.Println(<-ch) // receive from channel ch
+    }
+    fmt.Printf("%.2fs elapsed\n", time.Since(start).Seconds())
+}
+
+func fetch(url string, ch chan<- string) {
+    start := time.Now()
+    resp, err := http.Get(url)
+    if err != nil {
+        ch <- fmt.Sprint(err) // send to channel ch
+        return
+    }
+    nbytes, err := io.Copy(ioutil.Discard, resp.Body)
+    resp.Body.Close() // don't leak resources
+    if err != nil {
+        ch <- fmt.Sprintf("while reading %s: %v", url, err)
+        return
+    }
+    secs := time.Since(start).Seconds()
+    ch <- fmt.Sprintf("%.2fs  %7d  %s", secs, nbytes, url)
+}
+
+```
+
+`go fetch(url, ch) // start a goroutine`
+
+启动一个新的goroutine执行fetch(url, ch)函数，每个URL都在独立的线程中请求，main线程不会阻塞，会继续执行。
+
+*goroutine是一种函数的并发执行方式，而channel是用来在goroutine之间进行参数传递。main函数本身也运行在一个goroutine中*
+
+` ch := make(chan string)`
+
+创建一个channel（通道），让goroutine把结果传回主goroutine
+
+`ch <- fmt.Sprintf("%.2fs  %7d  %s", secs, nbytes, url)`
+
+fetch函数把格式化好的字符串发送到通道ch，这个过程会**阻塞发送方**，直到有接收方（main 函数）从 `ch` 中读取。
+
+    for range os.Args[1:] {
+        fmt.Println(<-ch) // receive from channel ch
+    }
+
+主线程依次接收并打印
+
+总体流程
+
+```
+main()
+│
+├── 创建 channel ch
+│
+├── 启动 N 个 goroutine 并发 fetch(url, ch)
+│      └── 每个 fetch 执行 http.Get
+│      └── 完成后通过 ch <- result 把结果发回主线程
+│
+├── 主线程通过 <-ch 读取每个结果（共 N 次）
+│
+└── 打印总耗时
+
+```
+
+**练习 1.10：** 找一个数据量比较大的网站，用本小节中的程序调研网站的缓存策略，对每个URL执行两遍请求，查看两次时间是否有较大的差别，并且每次获取到的响应内容是否一致，修改本节中的程序，将响应结果输出到文件，以便于进行对比。
+
+```
+// Fetchall fetches URLs in parallel and reports their times and sizes.
+package main
+
+import (
+    "fmt"
+    "io"
+    "net/http"
+    "os"
+    "time"
+    "strings"
+)
+
+func main() {
+    start := time.Now()
+    ch := make(chan string)
+
+    for _, url := range os.Args[1:] {
+        go fetch(url, ch) // start a goroutine
+    }
+    for range os.Args[1:] {
+        fmt.Println(<-ch) // receive from channel ch
+    }
+
+    fmt.Printf("%.2fs elapsed\n", time.Since(start).Seconds())
+}
+
+func fetch(url string, ch chan<-- string) {
+    start := time.Now()
+    resp, err := http.Get(url)
+    if err != nil {
+        ch <- fmt.Sprint(err) // send to channel ch
+        return
+    }
+    filename := sanitizeFilename(url) + ".html"
+    file, err := os.Create(filename)
+    if err != nil {
+        ch <- fmt.Sprintf("create file error for %s: %v", url, err)
+        return
+    }
+    defer file.Close()
+
+    // 将 body 内容写入文件，同时统计大小
+    nbytes, err := io.Copy(file, resp.Body)
+    if err != nil {
+        ch <- fmt.Sprintf("write error for %s: %v", url, err)
+        return
+    }
+
+    secs := time.Since(start).Seconds()
+    ch <- fmt.Sprintf("%.2fs  %7d  %s  -> saved to %s", secs, nbytes, url, filename)
+}
+
+// sanitizeFilename 将 URL 简化为合法文件名
+func sanitizeFilename(url string) string {
+    url = strings.TrimPrefix(url, "http://")
+    url = strings.TrimPrefix(url, "https://")
+    url = strings.ReplaceAll(url, "/", "_")
+    return url
+}
+
+```
+
+主要修改fetch函数，将Body内容写入文件
+
+```
+❯ go run ./fetchall.go https://golang-china.github.io/gopl-zh/
+0.39s    30164  https://golang-china.github.io/gopl-zh/  -> saved to golang-china.github.io_gopl-zh_.html
+0.39s elapsed
+❯ mv golang-china.github.io_gopl-zh_.html a.html
+❯ go run ./fetchall.go https://golang-china.github.io/gopl-zh/
+0.22s    30164  https://golang-china.github.io/gopl-zh/  -> saved to golang-china.github.io_gopl-zh_.html
+0.22s elapsed
+❯ diff a.html golang-china.github.io_gopl-zh_.html
+```
+
+**练习 1.11：** 在fetchall中尝试使用长一些的参数列表，比如使用在alexa.com的上百万网站里排名靠前的。如果一个网站没有回应，程序将采取怎样的行为？（Section8.9 描述了在这种情况下的应对机制）。
+
+```
+ client := http.Client{
+        Timeout: 5 * time.Second,
+    }
+
+    resp, err := client.Get(url)
+```
+
+创建一个客户端，设置超时时间、
+
+限制并发数量、记录日志（后续再尝试）
+
+---
+
+Q：本小结用到的几个print有什么区别？
+
+A：
+
+| 函数      | 用途                      | 是否格式化 | 是否换行 | 是否返回字符串 |
+| --------- | ------------------------- | ---------- | -------- | -------------- |
+| `Sprintf` | 构造字符串，不打印        | ✅          | ❌        | ✅              |
+| `Printf`  | 格式化并打印              | ✅          | ❌        | ❌              |
+| `Println` | 直接打印（自动空格+换行） | ❌          | ✅        | ❌              |
+
+---
 
