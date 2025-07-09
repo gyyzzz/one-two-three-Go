@@ -1,10 +1,11 @@
 # Go语言自学笔记
 
-| 日期       | 内容                              |
-| ---------- | --------------------------------- |
-| 2025.07.03 | （译者序、前言、入门1.1 1.2章节） |
-| 2025.07.04 | （1.3）                           |
-| 2025.07.07 | （1.4、1.5）                      |
+| 日期       | 内容                  |
+| ---------- | --------------------- |
+| 2025.07.03 | 译者序、前言、1.1 1.2 |
+| 2025.07.04 | 1.3                   |
+| 2025.07.07 | 1.4、1.5              |
+| 2025.07.09 | 1.6、1.7              |
 
 ## 一、为什么要学
 
@@ -791,7 +792,7 @@ main()
 
 **练习 1.10：** 找一个数据量比较大的网站，用本小节中的程序调研网站的缓存策略，对每个URL执行两遍请求，查看两次时间是否有较大的差别，并且每次获取到的响应内容是否一致，修改本节中的程序，将响应结果输出到文件，以便于进行对比。
 
-```
+```go
 // Fetchall fetches URLs in parallel and reports their times and sizes.
 package main
 
@@ -856,7 +857,7 @@ func sanitizeFilename(url string) string {
 
 主要修改fetch函数，将Body内容写入文件
 
-```
+```go
 ❯ go run ./fetchall.go https://golang-china.github.io/gopl-zh/
 0.39s    30164  https://golang-china.github.io/gopl-zh/  -> saved to golang-china.github.io_gopl-zh_.html
 0.39s elapsed
@@ -869,7 +870,7 @@ func sanitizeFilename(url string) string {
 
 **练习 1.11：** 在fetchall中尝试使用长一些的参数列表，比如使用在alexa.com的上百万网站里排名靠前的。如果一个网站没有回应，程序将采取怎样的行为？（Section8.9 描述了在这种情况下的应对机制）。
 
-```
+```go
  client := http.Client{
         Timeout: 5 * time.Second,
     }
@@ -894,4 +895,113 @@ A：
 | `Println` | 直接打印（自动空格+换行） | ❌          | ✅        | ❌              |
 
 ---
+
+#### 1.7.web服务
+
+
+
+**练习 1.12：** 修改Lissajour服务，从URL读取变量，比如你可以访问 http://localhost:8000/?cycles=20 这个URL，这样访问可以将程序里的cycles默认的5修改为20。字符串转换为数字可以调用strconv.Atoi函数。你可以在godoc里查看strconv.Atoi的详细说明。
+
+```go
+// Server1 is a minimal "echo" server.
+package main
+
+import (
+    "image"
+    "image/color"
+    "image/gif"
+    "io"
+    "math"
+    "math/rand"
+	  "net/http"
+    "log"
+    "fmt"
+    "strconv"
+)
+
+
+var palette = []color.Color{
+    color.White,                        // 背景色
+    color.RGBA{0xFF, 0x00, 0x00, 0xFF}, // 红
+    color.RGBA{0xFF, 0xA5, 0x00, 0xFF}, // 橙
+    color.RGBA{0xFF, 0xFF, 0x00, 0xFF}, // 黄
+    color.RGBA{0x00, 0xFF, 0x00, 0xFF}, // 绿
+    color.RGBA{0x00, 0x00, 0xFF, 0xFF}, // 蓝
+    color.RGBA{0x4B, 0x00, 0x82, 0xFF}, // 靛
+    color.RGBA{0x8B, 0x00, 0xFF, 0xFF}, // 紫
+}
+
+const (
+    whiteIndex = 0 // first color in palette
+)
+
+func main() {
+    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+    r.ParseForm() // 解析URL中的参数
+    cycles := 5
+    //获取cycel值
+    if val := r.Form.Get("cycles"); val != "" {
+    //字符串转换in t
+            if parsed, err := strconv.Atoi(val); err == nil {
+                cycles = parsed
+            }
+        }
+
+    lissajous(w, cycles)
+})
+    log.Fatal(http.ListenAndServe("localhost:8000", nil))
+}
+
+//修改函数签名
+func lissajous(out io.Writer, cycles int) {
+    const (
+        res     = 0.001 // angular resolution
+        size    = 100   // image canvas covers [-size..+size]
+        nframes = 64    // number of animation frames
+        delay   = 8     // delay between frames in 10ms units
+    )
+
+    freq := rand.Float64() * 3.0 // relative frequency of y oscillator
+    anim := gif.GIF{LoopCount: nframes}
+    phase := 0.0 // phase difference
+    for i := 0; i < nframes; i++ {
+        rect := image.Rect(0, 0, 2*size+1, 2*size+1)
+        img := image.NewPaletted(rect, palette)
+
+        colorIndex := uint8(i%(len(palette)-1) + 1)
+				//进行浮点数计算，转换cycles类型
+        for t := 0.0; t < float64(cycles)*2*math.Pi; t += res {
+            x := math.Sin(t)
+            y := math.Sin(t*freq + phase)
+            img.SetColorIndex(size+int(x*size+0.5), size+int(y*size+0.5), colorIndex)
+        }
+        phase += 0.1
+        anim.Delay = append(anim.Delay, delay)
+        anim.Image = append(anim.Image, img)
+    }
+    gif.EncodeAll(out, &anim) // NOTE: ignoring encoding errors
+}
+
+```
+
+#### 1.8.本章要点
+
+*本章对Go语言做了一些介绍，Go语言很多方面在有限的篇幅中无法覆盖到。本节会把没有讲到的内容也做一些简单的介绍，这样读者在读到完整的内容之前，可以有个简单的印象。*
+
+***控制流：** 在本章我们只介绍了if控制和for，但是没有提到switch多路选择。这里是一个简单的switch的例子：*
+
+```
+switch coinflip() {
+case "heads":
+    heads++
+case "tails":
+    tails++
+default:
+    fmt.Println("landed on edge!")
+}
+```
+
+*在每一个函数之前写一个说明函数行为的注释也是一个好习惯。这些惯例很重要，因为这些内容会被像godoc这样的工具检测到，并且在执行命令时显示这些注释*
+
+*多行注释可以用 `/* ... */` 来包裹，和其它大多数语言一样。*
 
