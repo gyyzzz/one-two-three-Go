@@ -898,8 +898,6 @@ A：
 
 #### 1.7.web服务
 
-
-
 **练习 1.12：** 修改Lissajour服务，从URL读取变量，比如你可以访问 http://localhost:8000/?cycles=20 这个URL，这样访问可以将程序里的cycles默认的5修改为20。字符串转换为数字可以调用strconv.Atoi函数。你可以在godoc里查看strconv.Atoi的详细说明。
 
 ```go
@@ -1005,3 +1003,177 @@ default:
 
 *多行注释可以用 `/* ... */` 来包裹，和其它大多数语言一样。*
 
+### 2.程序结构
+
+*Go语言和其他编程语言一样，一个大的程序是由很多小的基础构件组成的。变量保存值，简单的加法和减法运算被组合成较复杂的表达式。基础类型被聚合为数组或结构体等更复杂的数据结构。然后使用if和for之类的控制语句来组织和控制表达式的执行流程。然后多个语句被组织到一个个函数中，以便代码的隔离和复用。函数以源文件和包的方式被组织。*
+
+*我们已经在前面章节的例子中看到了很多例子。在本章中，我们将深入讨论Go程序基础结构方面的一些细节。每个示例程序都是刻意写的简单，这样我们可以减少复杂的算法或数据结构等不相关的问题带来的干扰，从而可以专注于Go语言本身的学习。*
+
+#### 2.1.命名
+
+*Go语言中的函数名、变量名、常量名、类型名、语句标号和包名等所有的命名，都遵循一个简单的命名规则：一个名字必须以一个字母（Unicode字母）或下划线开头，后面可以跟任意数量的字母、数字或下划线。大写字母和小写字母是不同的：heapSort和Heapsort是两个不同的名字。*
+
+类似if和switch的关键字有25个；关键字不能用于自定义名字，只能在特定语法结构中使用。
+
+```
+break      default       func     interface   select
+case       defer         go       map         struct
+chan       else          goto     package     switch
+const      fallthrough   if       range       type
+continue   for           import   return      var
+```
+
+此外，还有大约30多个预定义的名字，比如int和true等，主要对应内建的常量、类型和函数。
+
+```
+内建常量: true false iota nil
+
+内建类型: int int8 int16 int32 int64
+          uint uint8 uint16 uint32 uint64 uintptr
+          float32 float64 complex128 complex64
+          bool byte rune string error
+
+内建函数: make len cap new append copy close delete
+          complex real imag
+          panic recover
+```
+
+*这些内部预先定义的名字并不是关键字，你可以在定义中重新使用它们。*
+
+
+
+*如果一个名字是在函数**内部定义**，那么它就只在函数内部有效。如果是在函数**外部定义**，那么将在当前包的所有文件中都可以访问。名字的**开头字母的大小写决定了名字在包外的可见性**。**例如fmt包的Printf函数就是导出的，可以在fmt包外部访问。包本身的名字一般总是用小写字母*。
+
+导出举例：
+
+```go
+// 在 mypkg 包中定义的内容
+package mypkg
+
+// 导出类型（外部可见）
+type Person struct {
+    Name string // 导出字段
+    age  int    // 未导出字段（只能在 mypkg 内访问）
+}
+
+// 导出函数
+func SayHello() {
+    // ...
+}
+
+// 未导出函数（小写字母开头，只能在 mypkg 包内部使用）
+func secretFunction() {
+    // ...
+}
+
+```
+
+```go
+import "mypkg"
+
+func main() {
+    p := mypkg.Person{}  // ✅ 可以访问导出的类型
+    p.Name = "Alice"     // ✅ 可以访问导出的字段
+    // p.age = 30         // ❌ 编译错误，age 是未导出的字段
+    mypkg.SayHello()     // ✅ 导出的函数
+    // mypkg.secretFunction() // ❌ 编译错误，未导出的函数
+}
+
+```
+
+
+
+*尽量使用短小的名字，对于局部变量尤其是这样*
+
+*如果一个名字的作用域比较大，生命周期也比较长，那么用长的名字将会更有意义。*
+
+*推荐使用 **驼峰式** 命名，而像ASCII和HTML这样的缩略词则避免使用大小写混合的写法，它们可能被称为htmlEscape、HTMLEscape或escapeHTML，但不会是escapeHtml。*
+
+#### 2.2.声明
+
+Go语言主要有四种类型的声明语句：var、const、type和func，分别对应变量、常量、类型和函数实体对象的声明。
+
+*一个Go语言编写的程序对应一个或多个以.go为文件后缀名的源文件。每个源文件中以**包的声明语句开始**，说明该源文件是属于哪个包。包声明语句之后是i**mport语句导入依赖的其它包**，然后是**包一级的类型**、**变量、常量、函数的声明语句**，**包一级的各种类型的声明语句的顺序无关紧要*
+
+```
+// Boiling prints the boiling point of water.
+package main
+
+import "fmt"
+
+const boilingF = 212.0
+
+func main() {
+    var f = boilingF
+    var c = (f - 32) * 5 / 9
+    fmt.Printf("boiling point = %g°F or %g°C\n", f, c)
+    // Output:
+    // boiling point = 212°F or 100°C
+}
+
+```
+
+*其中**常量boilingF是在包一级范围声明**语句声明的，然后**f和c两个变量是在main函数内部声明**的声明语句声明的。在包一级声明语句声明的名字可在整个包对应的每个源文件中访问，而不是仅仅在其声明语句所在的源文件中访问。*
+
+例如：
+
+a.go
+
+```
+// Boiling prints the boiling point of water.
+package main
+
+import "fmt"
+
+const boilingF = 212
+
+func main() {
+		fmt.Println("Boiling point in Fahrenheit:", boilingF)
+    printCelsius()
+
+}
+```
+
+b.go
+
+```
+package main
+
+import "fmt"
+
+func printCelsius() {
+		c := (boilingF - 32) * 5 / 9 // 可以访问boilingF
+    fmt.Println("Boiling point in Celsius:", c)
+}
+```
+
+执行
+
+```
+❯ go mod init example.com/myapp
+
+go: creating new go.mod: module example.com/myapp
+go: to add module requirements and sums:
+        go mod tidy
+        
+❯ go run .
+Boiling point in Fahrenheit: 212
+Boiling point in Celsius: 100
+```
+
+
+
+函数声明的格式
+
+```
+func 函数名(参数列表) 返回值类型 {
+    // 函数体
+}
+
+如
+func fToC(f float64) float64 {
+    return (f - 32) * 5 / 9
+}
+```
+
+一个函数的声明由一个函数名字、参数列表、一个可选的返回值列表和包含函数定义的函数体组成。如果函数没有返回值，那么返回值列表是省略的。执行函数从函数的第一个语句开始，依次顺序执行直到遇到return返回语句，如果没有返回语句则是执行到函数末尾，然后返回到函数调用者。
