@@ -1374,3 +1374,48 @@ _, err = io.Copy(dst, src) // 丢弃字节数
 _, ok = x.(T)              // 只检测类型，忽略具体值
 ```
 
+#### 2.5.类型
+
+*在任何程序中都会存在一些变量有着相同的内部结构，但是却表示完全不同的概念。例如，一个int类型的变量可以用来表示一个循环的迭代索引、或者一个时间戳、或者一个文件描述符、或者一个月份；一个float64类型的变量可以用来表示每秒移动几米的速度、或者是不同温度单位下的温度；一个字符串可以用来表示一个密码或者一个颜色的名称。*
+
+```
+type 类型名字 底层类型
+```
+
+
+
+```go
+// Package tempconv performs Celsius and Fahrenheit temperature computations.
+package tempconv
+
+import "fmt"
+
+//定义了两个类型，底层都是float64，它们是不同的数据类型，因此它们不可以被相互比较或混在一个表达式运算
+type Celsius float64    // 摄氏温度
+type Fahrenheit float64 // 华氏温度
+
+const (
+    AbsoluteZeroC Celsius = -273.15 // 绝对零度
+    FreezingC     Celsius = 0       // 结冰点温度
+    BoilingC      Celsius = 100     // 沸水温度
+)
+
+/*Celsius(t)和Fahrenheit(t)是类型转换操作，它们并不是函数调用，类型转换不会改变值本身，但是会使它们的语义发生变化。
+CToF和FToC两个函数则是对不同温度单位下的温度进行换算，它们会返回不同的值。*/
+func CToF(c Celsius) Fahrenheit { return Fahrenheit(c*9/5 + 32) }
+
+func FToC(f Fahrenheit) Celsius { return Celsius((f - 32) * 5 / 9) }
+
+```
+
+
+
+*对于每一个类型T，都有一个对应的类型转换操作T(x)，用于将x转为T类型（译注：如果T是指针类型，可能会需要用小括弧包装T，比如`(*int)(0)`）。只有当两个类型的底层基础类型相同时，才允许这种转型操作，或者是两者都是指向相同底层结构的指针类型，这些转换只改变类型而不会影响值本身。*
+
+
+
+下面的声明语句，Celsius类型的参数c出现在了函数名的前面，表示声明的是Celsius类型的一个名叫String的方法，该方法返回该类型对象c带着°C温度单位的字符串：
+
+```Go
+func (c Celsius) String() string { return fmt.Sprintf("%g°C", c) }
+```
