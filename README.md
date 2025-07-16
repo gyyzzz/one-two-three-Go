@@ -6,6 +6,7 @@
 | 2025.07.04 | 1.3                   |
 | 2025.07.07 | 1.4、1.5              |
 | 2025.07.09 | 1.6、1.7              |
+| 2025.07.15 | 2                     |
 
 ## 一、为什么要学
 
@@ -1419,3 +1420,140 @@ func FToC(f Fahrenheit) Celsius { return Celsius((f - 32) * 5 / 9) }
 ```Go
 func (c Celsius) String() string { return fmt.Sprintf("%g°C", c) }
 ```
+
+#### 2.6.包和文件
+
+
+
+**练习 2.1：** 写一个通用的单位转换程序，用类似cf程序的方式从命令行读取参数，如果缺省的话则是从标准输入读取参数，然后做类似Celsius和Fahrenheit的单位转换，长度单位可以对应英尺和米，重量单位可以对应磅和公斤等。
+
+目录结构：
+
+```
+❯ tree
+.
+├── go.mod
+├── main.go
+└── tempconv
+    ├── conv.go
+    ├── go.mod
+    └── tempconv.go
+```
+
+```
+go mod init local/tempconv
+```
+
+go.mod
+
+```
+module local/myapp
+
+go 1.24.4
+
+replace local/tempconv => ./tempconv
+
+require local/tempconv v0.0.0-00010101000000-000000000000 // indirect
+```
+
+main.go
+
+```
+package main
+
+import (
+	"fmt"
+	"local/tempconv" // 注意这里的模块名必须与你 go.mod 中的一致
+)
+
+func main() {
+	k := tempconv.Kelvin(273.15)
+	c := tempconv.KToC(k)
+
+	fmt.Println("k:", k)       // 输出：273.15K
+	fmt.Println("k to c :", c) // 输出：0°C
+}
+
+```
+
+conv.go
+
+```go
+package tempconv
+
+// CToF converts a Celsius temperature to Fahrenheit.
+func CToF(c Celsius) Fahrenheit { return Fahrenheit(c*9/5 + 32) }
+
+// FToC converts a Fahrenheit temperature to Celsius.
+func FToC(f Fahrenheit) Celsius { return Celsius((f - 32) * 5 / 9) }
+
+func CToK(c Celsius) Kelvin { return Kelvin(c + 273.15) }
+
+func KToC(k Kelvin) Celsius { return Celsius(k - 273.15) }
+
+```
+
+tempconv.go
+
+```go
+// Package tempconv performs Celsius and Fahrenheit conversions.
+package tempconv
+
+import "fmt"
+
+type Celsius float64
+type Fahrenheit float64
+type Kelvin float64
+
+const (
+	AbsoluteZeroC Celsius = -273.15
+	FreezingC     Celsius = 0
+	BoilingC      Celsius = 100
+	AbsoluteZeroK Kelvin  = 0
+)
+
+func (c Celsius) String() string    { return fmt.Sprintf("%g°C", c) }
+func (f Fahrenheit) String() string { return fmt.Sprintf("%g°F", f) }
+func (k Kelvin) String() string     { return fmt.Sprintf("%gK", k) }
+
+```
+
+**练习 2.2：** 写一个通用的单位转换程序，用类似cf程序的方式从命令行读取参数，如果缺省的话则是从标准输入读取参数，然后做类似Celsius和Fahrenheit的单位转换，长度单位可以对应英尺和米，重量单位可以对应磅和公斤等。
+
+```go
+// 从输入参数进行重量转换
+package main
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+)
+
+type ounce float64
+type gram float64
+
+func (o ounce) String() string { return fmt.Sprintf("%g oz", o) }
+func (g gram) String() string  { return fmt.Sprintf("%g g", g) }
+
+func OToG(o ounce) gram { return gram(o * 28.3495) }
+
+func GToO(g gram) ounce { return ounce(g / 28.3495) }
+
+func main() {
+	for _, args := range os.Args[1:] {
+		t, err := strconv.ParseFloat(args, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "weightconv: %v\n", err)
+			os.Exit(1)
+		}
+		o := ounce(t)
+		g := OToG(o)
+		fmt.Printf("%s = %s\n", o, g)
+		g2 := GToO(g)
+		fmt.Printf("%s = %s\n", g, g2)
+	}
+}
+
+```
+
