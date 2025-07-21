@@ -8,15 +8,13 @@
 | 2025.07.09 | 1.6、1.7              |
 | 2025.07.15 | 2                     |
 
-## 一、为什么要学
+## 一、前言
 
   中国有句古话，三思而后行。英文就是one, two ,three , Go.所以三思后要学Go（开个玩笑）。
 
 以下内容源自互联网：
 
   Golang —— 让你用写Python代码的开发效率编写出C++代码的性能。
-
-  Go语言(或Golang)是Golanguage的简称，Go是Google的Ken Thompson，Rob Pike以及Robert Griesemer开发的一种静态强类型、编译并发型语言。
 
   学习Go语言的主要原因是其在并发编程、系统编程和云原生领域的高效性和简洁性。Go语言特别适合构建高性能的网络服务、分布式系统、云计算基础设施和容器化应用。此外，Go语言的学习曲线相对平缓，对于有一定编程经验的开发者来说，上手比较容易。
 
@@ -26,7 +24,7 @@
 
 后续学习基于[《The Go Programming Language》（Go语言圣经中文版）](https://gopl-zh.github.io/index.html)进行，记录个人觉得书中关键和有意思的内容、代码练习等。
 
-### **前言**
+### **声明**
 
 后续参考引用会尽量表明，*“斜体”*代表直接引用书中内容，其他引自互联网的内容会特别标注。
 
@@ -1556,4 +1554,159 @@ func main() {
 }
 
 ```
+
+#### 2.7. 作用域
+
+**作用域**：编译时的概念，指一个名字变量、函数等）**在源代码中可见和可用的区域**。
+
+**生命周期**：运行时概念，指变量**在内存中存活的时间段**，即程序中变量存在并可被访问的时间。
+
+**语法块**：由 `{}` 包裹的代码块，如函数体、if、for 等结构。
+
+**词法块（lexical block）**：更广义的块结构，包括：
+
+- 明确写出来的 `{}` 块；
+- 每个函数、每个 if/for/switch/select 分支；
+- 每个包和整个程序都可视为一个词法块。
+
+**作用域决定于词法块**：块中声明的变量名在该块外不可访问。
+
+**名字屏蔽：**
+
+编译器查找变量定义时，**从里向外查找**：
+
+- 找到内层声明就停止；
+- 如果没找到，则报错“未声明的名字”。
+
+```
+func f() {} //包级函数f()
+
+var g = "g" //包级变量g
+
+func main() {
+    f := "f"  在 main 函数内部声明了局部变量 f，类型为 string，值为 "f"
+    fmt.Println(f) // "f"; local var f shadows package-level func f
+    fmt.Println(g) // "g"; package-level var
+    fmt.Println(h) // compile error: undefined: h
+}
+```
+
+`f := "f"` 创建了一个**局部变量 f**，它会**屏蔽（shadow）包级的函数 f**。`main`函数内，`f` 指的就是这个字符串变量，而不是那个包级函数。
+
+`h` 没有在任何作用域内声明，访问时编译器会报错。
+
+
+
+*和for循环类似，if和switch语句也会在条件部分创建隐式词法域，还有它们对应的执行体词法域。下面的if-else测试链演示了x和y的有效作用域范围：*
+
+```
+if x := f(); x == 0 {
+    fmt.Println(x)
+} else if y := g(x); x == y { //y的作用域只在else if这个分支
+    fmt.Println(x, y) 
+} else {
+    fmt.Println(x, y) //y不再作用域内
+}
+fmt.Println(x, y) // compile error: x and y are not visible here ，x y 都不在作用域内，只在if-else中
+```
+
+
+
+```
+在这个程序中：
+--------------
+if f, err := os.Open(fname); err != nil { // compile error: unused: f
+    return err
+}
+f.ReadByte() // compile error: undefined f
+f.Close()    // compile error: undefined f
+--------------
+变量f的作用域只在if语句内，因此后面的语句将无法引入它，这将导致编译错误。你可能会收到一个局部变量f没有声明的错误提示，具体错误信息依赖编译器的实现。
+--------------
+通常需要在if之前声明变量，这样可以确保后面的语句依然可以访问变量：
+--------------
+f, err := os.Open(fname)
+if err != nil {
+    return err
+}
+f.ReadByte()
+f.Close()
+--------------
+你可能会考虑通过将ReadByte和Close移动到if的else块来解决这个问题：
+--------------
+if f, err := os.Open(fname); err != nil {
+    return err
+} else {
+    // f and err are visible here too
+    f.ReadByte()
+    f.Close()
+}
+--------------
+```
+
+*但这不是Go语言推荐的做法，Go语言的习惯是在if中处理错误然后直接返回，这样可以确保正常执行的语句不需要代码缩进。*
+
+**在 Go 中使用 `:=` 进行短变量声明时，要特别小心作用域问题，尤其是当变量在外部已经声明过时。**
+
+```
+go
+
+
+复制编辑
+var cwd string
+
+func init() {
+    cwd, err := os.Getwd() // ❌ 注意这里的 := 造成问题
+    if err != nil {
+        log.Fatalf("os.Getwd failed: %v", err)
+    }
+}
+```
+
+**问题出在 `cwd, err := os.Getwd()` 这一行：**
+
+- `:=` 是**短变量声明**，意味着它会在当前作用域**重新声明变量**；
+- 即使 `cwd` 在包级已经声明了，但这一行又**重新声明了一个局部变量 `cwd`**；
+- 因为局部变量 `cwd` 屏蔽了包级变量，包级的 `cwd` 实际没有被赋值；
+- 更严重的是，如果 `cwd` 在后面被使用了，**你会以为是包级的，其实是局部的，可能完全没赋值**！
+
+------
+
+### 📛 隐蔽 Bug 示例
+
+```
+go
+
+
+复制编辑
+log.Printf("Working directory = %s", cwd)
+```
+
+如果你这样写了，**打印的其实是局部变量 `cwd` 的值**，而包级变量依然没有被初始化。
+
+这种 bug 非常难发现，尤其当程序看起来运行正常时。
+
+为了避免这个陷阱，我们应该手动声明 `err`，然后用 `=` 来赋值，这样不会引入新的 `cwd`：
+
+```
+go
+
+
+复制编辑
+var cwd string
+
+func init() {
+    var err error
+    cwd, err = os.Getwd() // ✅ 正确地更新了包级 cwd
+    if err != nil {
+        log.Fatalf("os.Getwd failed: %v", err)
+    }
+```
+
+| 点     | 内容                                                   |
+| ------ | ------------------------------------------------------ |
+| ❗ 问题 | 使用 `:=` 会重新声明变量，即使外部已有同名变量         |
+| 🎭 后果 | 局部变量屏蔽了包级变量，导致全局变量没被赋值           |
+| 🔍 难点 | 程序看似正常，但实际数据丢失或未赋值，容易引发隐蔽 bug |
+| ✅ 解决 | 不使用 `:=`，手动 `var err`，再用 `=` 赋值，避免重声明 |
 
